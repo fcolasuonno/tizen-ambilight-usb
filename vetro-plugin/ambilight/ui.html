@@ -1,0 +1,391 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
+<title>Ambilight</title>
+<style>
+  :root { font: 15px system-ui, sans-serif; }
+  body { margin: 0; padding: 16px; max-width: 860px; }
+  h1 { font-size: 18px; margin: 0 0 12px; }
+  h2 { font-size: 14px; margin: 18px 0 8px; }
+  #state { font-family: ui-monospace, monospace; padding: 10px 12px; border: 1px solid #8884; border-radius: 8px; margin-bottom: 12px; white-space: pre-wrap; }
+  button { font: inherit; padding: 7px 12px; margin: 0 6px 6px 0; border-radius: 8px; border: 1px solid #8888; background: #8882; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: #26a269; color: white; border-color: #26a269; }
+  fieldset { border: 1px solid #8884; border-radius: 8px; margin: 0 0 12px; padding: 10px 12px 4px; }
+  legend { font-weight: 600; padding: 0 6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 8px 14px; }
+  label { display: block; font-size: 12px; opacity: .85; }
+  input { font: inherit; width: 100%; box-sizing: border-box; padding: 5px 6px; border: 1px solid #8886; border-radius: 6px; background: transparent; color: inherit; }
+  .hint { font-size: 11px; opacity: .65; }
+  #fw { font-size: 13px; padding: 8px 10px; background: #8882; border-radius: 8px; }
+  #msg { font-size: 13px; min-height: 18px; margin: 8px 0; color: #c33; white-space: pre-wrap; }
+  pre { font-size: 12px; line-height: 1.35; background: #8881; padding: 10px; border-radius: 8px; overflow: auto; max-height: 35vh; margin: 0; }
+</style>
+<h1>Ambilight</h1>
+<div id="state">loading…</div>
+<div>
+  <button id="start">Start</button>
+  <button id="stop">Stop</button>
+  <button id="restart">Restart</button>
+</div>
+
+<h2>Settings</h2>
+<div id="fw">reading the board…</div>
+<div id="msg"></div>
+<fieldset>
+  <legend>Layout preview — click the ring to place LED 0</legend>
+  <canvas id="ring" width="640" height="380" style="width:100%;max-width:640px;cursor:crosshair;border-radius:6px"></canvas>
+  <div class="hint">Colours run in physical LED order: red → green → blue → red. Grey ticks are zone
+  boundaries. Click or drag anywhere on the perimeter to move the start; the white ring is LED 0.</div>
+  <div>
+    <button id="rev">Flip direction</button>
+    <button id="topleft">Start top-left</button>
+    <button id="gap">Start at bottom gap</button>
+    <button id="mycut">My cut 97/53/96/53</button>
+    <button id="vivid">Vivid colours</button>
+  </div>
+  <div id="ringinfo" class="hint">—</div>
+</fieldset>
+<fieldset>
+  <legend>Geometry — where the light goes</legend>
+  <div class="grid" id="geometry"></div>
+</fieldset>
+<fieldset>
+  <legend>Look &amp; feel — how it reacts</legend>
+  <div class="grid" id="look"></div>
+</fieldset>
+<div>
+  <button id="preset">77″ / 300 LEDs</button>
+  <button id="resetgeo">Reset geometry</button>
+  <button id="save" class="primary">Save</button>
+  <button id="saverestart" class="primary">Save &amp; restart</button>
+</div>
+<p class="hint">Settings are read by the service only at startup. "Save &amp; restart" applies them now;
+the board's compiled LED count is the hard upper limit.</p>
+
+<h2 style="font-size:14px;margin:16px 0 8px">run.log (tail)</h2>
+<pre id="log">…</pre>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  var busy = false;
+  var fw = { leds: 300, type: 'RGBW', source: 'cached' };
+
+  // Mirrors SPECS in index.js. The board's LED count replaces the fixed maximum at load time.
+  var FIELDS = [
+    { g:'geometry', k:'ledCount',   t:'LEDs on the strip',      min:1,    max:300, step:1,    hint:'must match the firmware (compiled in)' },
+    { g:'geometry', k:'zoneCount',  t:'Zones around the ring',  min:1,    max:300, step:1,    hint:'one zone per LED by default' },
+    { g:'geometry', k:'zoneTop',    t:'Top section LEDs',       min:0,    max:300, step:1,    hint:'0 = proportional; your cut: 97' },
+    { g:'geometry', k:'zoneRight',  t:'Right section LEDs',     min:0,    max:300, step:1,    hint:'0 = proportional; your cut: 53' },
+    { g:'geometry', k:'zoneBottom', t:'Bottom section LEDs',    min:0,    max:300, step:1,    hint:'0 = proportional; your cut: 96 (48+48)' },
+    { g:'geometry', k:'zoneLeft',   t:'Left section LEDs',      min:0,    max:300, step:1,    hint:'0 = proportional; your cut: 53' },
+    { g:'geometry', k:'mapOffset',  t:'Start offset (LED)',     min:0,    max:299, step:1,    hint:'where LED 0 sits on the wall' },
+    { g:'geometry', k:'mapReverse', t:'Reverse direction',      min:0,    max:1,   step:1,    hint:'0 = clockwise, 1 = anticlockwise' },
+    { g:'geometry', k:'bandFrac',   t:'Edge band fraction',     min:0.01, max:0.5, step:0.01, hint:'height of each perimeter zone band' },
+    { g:'geometry', k:'bars',       t:'Crop letterbox',         min:0,    max:1,   step:1,    hint:'detect black bars at top/bottom' },
+    { g:'geometry', k:'barRows',    t:'Row-based bar detection',min:0,    max:1,   step:1,    hint:'off by default: false positives' },
+    { g:'geometry', k:'barThresh',  t:'Bar threshold',          min:0,    max:255, step:1,    hint:'luma below this counts as a bar' },
+    { g:'look', k:'alpha',      t:'Smoothing (alpha)',      min:0,   max:1,   step:0.01, hint:'lower = smoother, slower' },
+    { g:'look', k:'gamma',      t:'Gamma',                  min:0.5, max:4,   step:0.05, hint:'raise for brighter midtones' },
+    { g:'look', k:'saturation', t:'Saturation',              min:0.5, max:3,   step:0.05, hint:'chroma boost; 1.2-1.5 for vivid colours' },
+    { g:'look', k:'black',      t:'Black level',             min:0,   max:200, step:1,    hint:'lifts every channel; lower = deeper colours' },
+    { g:'look', k:'spatial',    t:'Neighbour blur',          min:0,   max:1,   step:0.05, hint:'blends adjacent zones; lower = tighter colours' },
+    { g:'look', k:'peak',       t:'HDR peak (nits)',         min:100, max:4000,step:10,   hint:'assumed HDR highlight level; higher = less pastel' },
+    { g:'look', k:'targetFps',  t:'Target fps',              min:0,   max:120, step:1,    hint:'0 = uncapped; triples on a still image' },
+    { g:'look', k:'staleMs',    t:'Fade after still (ms)',   min:0,   max:60000, step:500,  hint:'0 = never fade' },
+    { g:'look', k:'staleLevel', t:'Fade to',                 min:0,   max:1,   step:0.05, hint:'brightness while the picture is frozen' },
+    { g:'look', k:'punch',      t:'Scene-change punch',      min:0,   max:1,   step:0.05, hint:'brief boost on a cut' }
+  ];
+
+  var DEFAULTS = {
+    ledCount:300, zoneCount:300, zoneTop:0, zoneRight:0, zoneBottom:0, zoneLeft:0,
+    mapOffset:0, mapReverse:0, bandFrac:0.08,
+    bars:1, barRows:0, barThresh:18, alpha:0.25, gamma:1.5, saturation:1,
+    targetFps:25, staleMs:6000, staleLevel:0.35, punch:0.15,
+    black:12, spatial:0.5, peak:203
+  };
+
+  function build() {
+    FIELDS.forEach(function (f) {
+      var wrap = document.createElement('div');
+      var lab = document.createElement('label');
+      lab.textContent = f.t;
+      var inp = document.createElement('input');
+      inp.type = 'number'; inp.id = 'f_' + f.k; inp.min = f.min; inp.max = f.max; inp.step = f.step;
+      lab.appendChild(inp); wrap.appendChild(lab);
+      var hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = f.hint;
+      wrap.appendChild(hint);
+      $(f.g).appendChild(wrap);
+    });
+  }
+
+  function setValues(vals) {
+    FIELDS.forEach(function (f) {
+      var v = vals[f.k];
+      if (v === undefined || v === null) v = DEFAULTS[f.k];
+      $('f_' + f.k).value = v;
+    });
+  }
+
+  function values() {
+    var out = {};
+    FIELDS.forEach(function (f) { out[f.k] = Number($('f_' + f.k).value); });
+    return out;
+  }
+
+  function msg(text, isError) {
+    $('msg').textContent = text || '';
+    $('msg').style.color = isError ? '#c33' : '#2a7';
+  }
+
+  function setBusy(b) {
+    busy = b;
+    ['start','stop','restart','save','saverestart','preset','resetgeo'].forEach(function (k) { $(k).disabled = b; });
+  }
+
+  function render(s) {
+    var lines = [
+      'state   : ' + (s.state || '?'),
+      'pid     : ' + (s.pid || '-'),
+      'device  : ' + (s.device || '-'),
+      'module  : ' + (s.module || '-'),
+      'version : ' + (s.version || '-'),
+      'serial  : ' + (s.serial || '-')
+    ];
+    if (s.captureProblem) lines.push('capture : ' + s.captureProblem);
+    if (s.lastAction) lines.push('action  : ' + s.lastAction);
+    if (s.lastError) lines.push('error   : ' + s.lastError);
+    $('state').textContent = lines.join('\n');
+    $('log').textContent = s.log || '(no log yet)';
+  }
+
+  function getState() {
+    return fetch('state', { cache:'no-store' }).then(function (r) { return r.json(); }).then(render);
+  }
+
+  function getConfig() {
+    return fetch('config', { cache:'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
+      fw = d.firmware || fw;
+      $('fw').textContent = 'Board: ' + fw.leds + ' LEDs, ' + fw.type + ' (' + fw.source + ')' +
+        (fw.note ? ' — ' + fw.note : '');
+      if (fw.source === 'firmware') {
+        ['ledCount','zoneCount','mapOffset'].forEach(function (k) {
+          var el = $('f_' + k);
+          if (el) el.max = (k === 'mapOffset') ? fw.leds - 1 : fw.leds;
+        });
+      }
+      setValues(d.config || d.defaults || {});
+      // setValues changes the fields the preview reads; without this the first draw happened with
+      // empty inputs, so the preview showed the proportional split even when an exact cut was saved.
+      ringDraw();
+    });
+  }
+
+  function go(what) {
+    if (busy) return;
+    setBusy(true);
+    $('state').textContent = what + '…';
+    fetch(what, { method:'POST' }).then(function () { return getState(); })
+      .catch(function (e) { msg('error: ' + e); }).then(function () { setBusy(false); });
+  }
+
+  function save(restart) {
+    if (busy) return;
+    setBusy(true); msg('saving…');
+    fetch('config', {
+      method: 'POST', headers: { 'content-type':'application/json' },
+      body: JSON.stringify({ values: values(), restart: restart })
+    }).then(function (r) { return r.json().then(function (d) { return { ok:r.ok, body:d }; }); })
+      .then(function (d) {
+        if (!d.ok || !d.body.ok) {
+          msg((d.body.errors || [d.body.error || 'save failed']).join('\n'), true);
+        } else {
+          msg('saved' + (restart ? ' and restarted' : '') + '.', false);
+          return getConfig().then(getState);
+        }
+      })
+      .catch(function (e) { msg('error: ' + e, true); })
+      .then(function () { setBusy(false); });
+  }
+
+  $('start').onclick = function () { go('start'); };
+  $('stop').onclick = function () { go('stop'); };
+  $('restart').onclick = function () { go('restart'); };
+  $('save').onclick = function () { save(false); };
+  $('saverestart').onclick = function () { save(true); };
+  $('preset').onclick = function () { setValues(DEFAULTS); msg('preset loaded — press Save to apply.', false); };
+  $('resetgeo').onclick = function () {
+    ['mapOffset','mapReverse','bandFrac','bars','barRows','barThresh'].forEach(function (k) {
+      $('f_' + k).value = DEFAULTS[k];
+    });
+    $('f_zoneCount').value = $('f_ledCount').value;
+    msg('geometry reset — press Save to apply.', false);
+  };
+  $('vivid').onclick = function () {
+    // Counter the per-channel gamma lift, the black-level lift and the neighbour blur, then boost
+    // chroma. These are the knobs that made bright colours look pastel on this TV.
+    $('f_gamma').value = 1.1; $('f_saturation').value = 1.4;
+    $('f_black').value = 2; $('f_spatial').value = 0.15;
+    $('f_punch').value = 0; $('f_peak').value = 400;
+    msg('vivid preset loaded — press Save & restart to apply.', false);
+  };
+
+  // ---- clickable layout preview -------------------------------------------------
+  // Mirrors ZoneLayout in ZoneEngine.cs: zones are distributed over the four edges in proportion to
+  // their length and walked top L->R, right T->B, bottom R->L, left B->T. LED n is fed zone
+  // (n + mapOffset) mod zoneCount, or (-n + mapOffset) when reversed. So the visual order is the real
+  // order the strip receives, not an approximation.
+  var RING = { x: 30, y: 27, w: 580, h: 326.25 };
+  function mod(n, m) { return ((n % m) + m) % m; }
+
+  function ringZones(total) {
+    var W = 960, H = 540, per = 2 * W + 2 * H, i;
+    var et = Number($('f_zoneTop').value) || 0, er = Number($('f_zoneRight').value) || 0,
+        eb = Number($('f_zoneBottom').value) || 0, el = Number($('f_zoneLeft').value) || 0;
+    if (et > 0 && er > 0 && eb > 0 && el > 0) {
+      // Exact cut list from the UI. Surplus slots go at the bottom-centre cut, AFTER the left edge,
+      // exactly as ZoneEngine.cs does, so every real LED keeps its position from the cut list.
+      var sum = et + er + eb + el;
+      while (sum > total && eb > 1) { eb--; sum--; }
+      while (sum > total && (et > 1 || er > 1 || el > 1)) {
+        if (et >= er && et >= el && et > 1) et--;
+        else if (er >= el && er > 1) er--;
+        else el--;
+        sum--;
+      }
+      var spare = total - sum, out = [];
+      for (i = 0; i < et; i++) out.push({ x: (i + 0.5) / et, y: 0 });
+      for (i = 0; i < er; i++) out.push({ x: 1, y: (i + 0.5) / er });
+      // Pitch is set by the TOP section (97 LEDs across the top width), not by the bottom count.
+      // Each bottom section grows inward from its own corner, so a short section leaves a wide
+      // empty middle instead of being stretched across the whole edge.
+      var pitch = 1 / et, halfRight = Math.ceil(eb / 2), halfLeft = eb - halfRight;
+      for (i = 0; i < halfRight; i++) out.push({ x: 1 - (i + 0.5) * pitch, y: 1 });
+      for (i = 0; i < halfLeft; i++) out.push({ x: (halfLeft - i - 0.5) * pitch, y: 1 });
+      for (i = 0; i < el; i++) out.push({ x: 0, y: 1 - (i + 0.5) / el });
+      for (i = 0; i < spare; i++) out.push({ x: 0.5, y: 1 });
+      return { list: out, top: et, right: er, bottom: eb, left: el,
+               spare: spare, total: out.length, explicit: true, gap: pitch };
+    }
+    var left = Math.max(1, Math.round(total * H / per));
+    var top = Math.max(1, Math.round(total * W / per));
+    var right = left, bottom = top;
+    var sum = left + top + right + bottom;
+    while (sum < total) { bottom++; sum++; }
+    while (sum > total && bottom > 1) { bottom--; sum--; }
+    var out = [];
+    for (i = 0; i < top; i++) out.push({ x: (i + 0.5) / top, y: 0 });
+    for (i = 0; i < right; i++) out.push({ x: 1, y: (i + 0.5) / right });
+    for (i = 0; i < bottom; i++) out.push({ x: 1 - (i + 0.5) / bottom, y: 1 });
+    for (i = 0; i < left; i++) out.push({ x: 0, y: 1 - (i + 0.5) / left });
+    return { list: out, top: top, right: right, bottom: bottom, left: left,
+             spare: 0, total: out.length, explicit: false };
+  }
+
+  function ringPos(p) { return { x: RING.x + p.x * RING.w, y: RING.y + p.y * RING.h }; }
+
+  function ringSettings() {
+    return {
+      z: ringZones(Math.max(1, Number($('f_zoneCount').value) || 300)),
+      leds: Math.max(1, Number($('f_ledCount').value) || 300),
+      offset: Math.max(0, Number($('f_mapOffset').value) || 0),
+      reverse: Number($('f_mapReverse').value) === 1
+    };
+  }
+
+  function ringDraw() {
+    var s = ringSettings(), c = $('ring'), g = c.getContext('2d'), led;
+    g.clearRect(0, 0, c.width, c.height);
+    g.fillStyle = '#8881'; g.fillRect(RING.x, RING.y, RING.w, RING.h);
+    g.strokeStyle = '#8887'; g.lineWidth = 2; g.strokeRect(RING.x, RING.y, RING.w, RING.h);
+    // The physical cut in the strip (bottom centre) is not a software zone; draw it so the
+    // "Start at bottom gap" button has a visible target.
+    var gx = RING.x + RING.w / 2, gy = RING.y + RING.h;
+    g.strokeStyle = '#fff'; g.lineWidth = 2; g.setLineDash([3, 3]);
+    g.beginPath(); g.moveTo(gx, gy - 11); g.lineTo(gx, gy + 11); g.stroke();
+    g.setLineDash([]);
+    g.font = '12px system-ui'; g.fillStyle = '#aaa'; g.textAlign = 'center';
+    g.fillText('gap', gx, gy + 26); g.textAlign = 'start';
+    g.fillStyle = '#8886';
+    s.z.list.forEach(function (p) { var q = ringPos(p); g.beginPath(); g.arc(q.x, q.y, 2, 0, 6.283); g.fill(); });
+    for (led = 0; led < s.leds; led++) {
+      var zi = mod((s.reverse ? -led : led) + s.offset, s.z.total);
+      if (zi >= s.z.total - s.z.spare) continue;   // the cut: nothing is physically there
+      var q = ringPos(s.z.list[zi]);
+      g.fillStyle = 'hsl(' + Math.round(360 * led / s.leds) + ',85%,55%)';
+      g.beginPath(); g.arc(q.x, q.y, 3.2, 0, 6.283); g.fill();
+      if (led === 0) {
+        g.strokeStyle = '#fff'; g.lineWidth = 2;
+        g.beginPath(); g.arc(q.x, q.y, 7, 0, 6.283); g.stroke();
+      }
+    }
+    if (s.z.explicit) {
+      g.font = '12px system-ui'; g.fillStyle = '#aaa'; g.textAlign = 'center';
+      g.fillText(String(s.z.top), RING.x + RING.w / 2, RING.y - 8);
+      g.fillText(String(s.z.right), RING.x + RING.w + 16, RING.y + RING.h / 2);
+      g.fillText(String(s.z.bottom), RING.x + RING.w / 2, RING.y + RING.h - 10);
+      g.fillText(String(s.z.left), RING.x - 16, RING.y + RING.h / 2);
+      g.textAlign = 'start';
+    }
+    $('ringinfo').textContent = 'LED 0 → zone ' + s.offset + ' · ' +
+      (s.reverse ? 'anticlockwise' : 'clockwise') + ' · ' + s.z.total + ' zones (top ' +
+      s.z.top + ', right ' + s.z.right + ', bottom ' + s.z.bottom + ', left ' + s.z.left +
+      (s.z.spare ? ', +' + s.z.spare + ' at the cut' : '') + ')' + (s.z.explicit ? ' — exact cut list' : '');
+  }
+
+  function ringNearest(e) {
+    var c = $('ring'), r = c.getBoundingClientRect();
+    var x = (e.clientX - r.left) * c.width / r.width;
+    var y = (e.clientY - r.top) * c.height / r.height;
+    var z = ringZones(Math.max(1, Number($('f_zoneCount').value) || 300));
+    var best = -1, bd = 1e9;
+    z.list.forEach(function (p, i) {
+      var q = ringPos(p), d = (q.x - x) * (q.x - x) + (q.y - y) * (q.y - y);
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
+  }
+
+  function ringSet(e) {
+    var i = ringNearest(e);
+    if (i < 0) return;
+    $('f_mapOffset').value = i;
+    ringDraw();
+  }
+
+  function wireRing() {
+    ['f_ledCount','f_zoneCount','f_mapOffset','f_mapReverse'].forEach(function (k) {
+      $(k).addEventListener('input', ringDraw);
+    });
+    $('ring').addEventListener('click', ringSet);
+    $('rev').onclick = function () {
+      $('f_mapReverse').value = Number($('f_mapReverse').value) === 1 ? 0 : 1;
+      ringDraw();
+    };
+    $('topleft').onclick = function () { $('f_mapOffset').value = 0; ringDraw(); };
+    $('mycut').onclick = function () {
+      // 299 physical LEDs: top 97, right 53, bottom 96 (48+48), left 53, with the cut at bottom
+      // centre. zoneCount stays 300; the spare slot lands at the cut.
+      $('f_zoneTop').value = 97; $('f_zoneRight').value = 53;
+      $('f_zoneBottom').value = 96; $('f_zoneLeft').value = 53;
+      $('f_zoneCount').value = 300; $('f_ledCount').value = 300;
+      $('f_mapOffset').value = 0; $('f_mapReverse').value = 0;
+      ringDraw();
+    };
+    $('gap').onclick = function () {
+      // The bottom edge is walked right->left, so its midpoint zone is top + right + bottom/2.
+      // (Forgetting the top count puts the start on the right edge instead - fixed after a report.)
+      var z = ringZones(Math.max(1, Number($('f_zoneCount').value) || 300));
+      $('f_mapOffset').value = z.top + z.right + Math.floor(z.bottom / 2);
+      ringDraw();
+    };
+  }
+
+  build();
+  wireRing();
+  ringDraw();
+  getState();
+  getConfig().catch(function (e) { msg('could not read settings: ' + e, true); });
+  setInterval(getState, 5000);
+})();
+</script>

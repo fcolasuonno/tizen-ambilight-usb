@@ -1,0 +1,15 @@
+{
+  "id": "ambilight",
+  "name": "Ambilight",
+  "version": "1.0.0",
+  "apiVersion": 1,
+  "permissions": [
+    "exec"
+  ],
+  "author": "local",
+  "description": "Starts the USB ambilight service on boot and controls it from the dashboard.",
+  "main": "index.js",
+  "ui": {
+    "label": "Ambilight"
+  }
+}

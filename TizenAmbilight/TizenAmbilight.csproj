@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Fork of TizenAmbilight that drives an RP2040 NeoPxl8 board (Adafruit SCORPIO) directly over
+       USB serial instead of UDP/WLED. It runs as a ROOT CONSOLE SERVICE, outside the Tizen app
+       framework: that is what allows it to open /dev/ttyACM* (a Tizen app cannot) and it removes
+       the partner-certificate requirement for the capture libraries. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <RootNamespace>TizenAmbilight</RootNamespace>
+    <AssemblyName>AmbilightUsb</AssemblyName>
+    <NoWarn>$(NoWarn);CS0649;CS0169</NoWarn>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Nullable>disable</Nullable>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="bin/**;obj/**" />
+  </ItemGroup>
+
+</Project>

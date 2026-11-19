@@ -1,0 +1,21 @@
+{
+  "_comment": "TizenAmbilight settings. Copy to /opt/usr/share/ambilight/config.json on the TV (root console build). Every key is optional; the README lists them all. With a serialDevice set the USB-serial output is used; with wledIp set the original WLED-over-UDP output is used.",
+  "serialDevice": "/dev/ttyACM1",
+  "serialBaud": 115200,
+  "serialDump": "",
+  "wledIp": "",
+  "ledCount": 300,
+  "zoneCount": 300,
+  "zoneTop": 97,
+  "zoneRight": 53,
+  "zoneBottom": 96,
+  "zoneLeft": 53,
+  "targetFps": 25,
+  "outputEnabled": 1,
+  "ppiZones": 24,
+  "captureBackend": "plane",
+  "mapOffset": 0,
+  "mapReverse": 0,
+  "controlUrl": "",
+  "probeEndpoint": ""
+}
