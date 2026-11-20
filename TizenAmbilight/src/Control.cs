@@ -49,6 +49,15 @@ namespace TizenAmbilight
                                  break;
                     case "rev":  if (dv == 0 || dv == 1) cfg.MapReverse = dv != 0; break;
                     case "test": if (dv == 0 || dv == 1) cfg.TestPattern = dv != 0; break;
+                    // Master output switch, live. The Shard's on/off toggle writes this token. With
+                    // output disabled no frames are sent, so the SCORPIO blanks the strip itself after
+                    // BLANK_AFTER_MS - no restart, no blackout datagram needed on this serial build.
+                    case "enable": if (dv == 0 || dv == 1)
+                                   {
+                                       cfg.OutputEnabled = dv != 0;
+                                       L("output " + (cfg.OutputEnabled ? "ENABLED" : "DISABLED") + " by control token");
+                                   }
+                                   break;
                     case "leds": if (iv >= 4 && iv <= SerialOutput.MaxLeds) cfg.LedCount = iv; break;
                     // ---- tuning knobs, live. Lower alpha = MORE smoothing (longer EMA time constant).
                     case "alpha": if (dv >= 0.02 && dv <= 1.0) cfg.Alpha = dv; break;

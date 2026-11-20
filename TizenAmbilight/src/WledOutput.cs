@@ -123,6 +123,15 @@ namespace TizenAmbilight
                 else
                 {
                     double k = (double)nl / luma;
+                    // Cap the COMMON scale so no channel clips. Without this, a bright saturated
+                    // colour (e.g. orange [255,165,0]) has its top channel pinned at 255 while the
+                    // others keep growing, which raises their ratio and shifts the hue (orange read
+                    // as yellow on the wall). Capping k preserves every channel's ratio - hue and
+                    // chromaticity survive exactly - and costs only peak brightness on colours that
+                    // were already at the display limit. This is the same "one factor for all
+                    // channels" rule as above, with the missing constraint that the factor must fit.
+                    int mx = r0 > g0 ? (r0 > b0 ? r0 : b0) : (g0 > b0 ? g0 : b0);
+                    if (mx > 0 && k * mx > 255.0) k = 255.0 / mx;
                     int rr = (int)(r0 * k + 0.5), gg = (int)(g0 * k + 0.5), bb = (int)(b0 * k + 0.5);
                     p[o]     = (byte)(rr > 255 ? 255 : rr);
                     p[o + 1] = (byte)(gg > 255 ? 255 : gg);

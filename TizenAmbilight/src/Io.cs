@@ -19,6 +19,21 @@ namespace TizenAmbilight
         // endpoint can never build a backlog: the newest snapshot replaces the stale one.
         static volatile string _ctrlBody;
         static string _appliedCtrl;
+        // When no controlUrl is configured the app still polls a LOCAL token file. The Vetro Shard's
+        // on/off switch writes `enable=0/1` there, so toggling the strip needs neither a network
+        // endpoint nor a service restart. Same token grammar as the HTTP control channel.
+        const string LocalControlFile = "/tmp/amb-control";
+
+        static string ReadLocalControl()
+        {
+            try
+            {
+                return System.IO.File.Exists(LocalControlFile)
+                    ? System.IO.File.ReadAllText(LocalControlFile)
+                    : null;
+            }
+            catch { return null; }
+        }
         static int _dumpRequested;      // control token: dump the next captured frame for inspection
         static volatile bool _powerOff;
         static volatile bool _powerKnown;
@@ -226,10 +241,10 @@ namespace TizenAmbilight
                         }
                         catch (Exception e3) { L("tv info read failed: " + e3.GetType().Name); }
                     }
-                    if (cfg.HasControl && swCtrl.ElapsedMilliseconds >= ControlPollMs)
+                    if (swCtrl.ElapsedMilliseconds >= ControlPollMs)
                     {
                         swCtrl.Restart();
-                        string b = HttpGet(cfg.ControlUrl);
+                        string b = cfg.HasControl ? HttpGet(cfg.ControlUrl) : ReadLocalControl();
                         if (b != null) _ctrlBody = b;
                     }
                     if (swPower.ElapsedMilliseconds >= PowerPollCacheMs)

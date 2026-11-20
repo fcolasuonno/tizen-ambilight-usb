@@ -80,7 +80,7 @@ namespace TizenAmbilight
         public const string AppId = "dev.ritwickverma.TizenAmbilight";
         // Bump this whenever behaviour changes. It sat at "v3" through the HDR decode, the BT.2020->709
         // gamut map and the adaptive tone curve, which made build identification useless in telemetry.
-        public const string Version = "v8-usb";   // v8-usb: USB-serial output + 5 s status line
+        public const string Version = "v10-usb";  // v10-usb: live `enable` token + local control file for the Shard's on/off switch
 
         // ---- failure handling ----
         const int FailSleepMs = 200;                     // pause after a frame-less iteration

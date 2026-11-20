@@ -52,21 +52,27 @@ The Shard's tab has a **Settings** section on top of Start / Stop / Restart and 
 | group | fields |
 |---|---|
 | Geometry | LED count, zone count, **exact per-edge cut counts (top/right/bottom/left)**, start offset, reverse, edge band fraction, letterbox crop and threshold |
-| Look & feel | smoothing (alpha), gamma, saturation, black level, neighbour blur, HDR peak nits, target fps, still-image fade delay/level, scene punch |
+| Look & feel | smoothing (alpha), gamma, saturation, black level, neighbour blur, HDR peak nits, HDR/PQ input and BT.2020→BT.709 gamut mapping, target fps, still-image fade delay/level, scene punch |
 
+- **Ambilight: ON/OFF** is a live output switch: it writes `enable=0/1` to `/tmp/amb-control` (the
+  app's local control file when no `controlUrl` is set) and persists `outputEnabled` in config. The
+  service keeps running; with output off no frames are sent and the SCORPIO blanks the strip after
+  ~400 ms. Turning it back on resumes immediately.
 - **Save** writes `/opt/usr/share/ambilight/config.json`; **Save & restart** also stops the service via
   the stop file and starts it again, because the app reads its config only at startup.
 - A **layout preview** draws the 16:9 TV outline with all zone positions and the LEDs coloured in
   physical order (red→green→blue). It uses the same perimeter distribution and walk order as
   `ZoneEngine.cs`, so what you see is the order the strip actually receives. Click/drag the ring to
   place LED 0 (sets `mapOffset`); **Flip direction** toggles `mapReverse`; **Start top-left** and
-  **Start at bottom gap** are useful presets (the physical gap at bottom-centre is where the ring
-  should begin/end).
+  **My cut** are useful presets. On this TV the strip is one continuous 300-LED ring with no bottom
+  gap: cut 97/53/97/53, starting at the bottom-right corner and running counter-clockwise
+  (`mapOffset=149`, `mapReverse=1`).
 - On load the panel probes the board with the hello frame and reads `AMBI1 <count> <type>` from its
   banner. LED count, zone count and the offset are clamped to that compiled-in value — an oversized
   config would silently drop every frame. When the service is running the port cannot be probed, so the
   last successful answer (kept in the Shard's own `config.json`) is used and labelled `cached`.
-- Presets: **77″ / 300 LEDs** restores the values this TV was tuned with; **Reset geometry** clears the
+- Presets: **77″ / 300 LEDs** restores the values this TV is calibrated with (the same numbers in both
+  `DEFAULTS` objects, including `hdr=0` / `gamut=0` for SDR); **Reset geometry** clears the
   offset/direction/crop settings without touching the look & feel values.
 - Only the fields above are written; `serialDevice` (the stable `/dev/serial/by-id` symlink), the
   backend and all other keys are preserved untouched.

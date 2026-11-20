@@ -11,6 +11,7 @@
   button { font: inherit; padding: 7px 12px; margin: 0 6px 6px 0; border-radius: 8px; border: 1px solid #8888; background: #8882; cursor: pointer; }
   button:disabled { opacity: .5; cursor: default; }
   button.primary { background: #26a269; color: white; border-color: #26a269; }
+  button.off { background: #8882; color: inherit; border-color: #8888; }
   fieldset { border: 1px solid #8884; border-radius: 8px; margin: 0 0 12px; padding: 10px 12px 4px; }
   legend { font-weight: 600; padding: 0 6px; }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 8px 14px; }
@@ -28,6 +29,9 @@
   <button id="stop">Stop</button>
   <button id="restart">Restart</button>
 </div>
+<div>
+  <button id="outputToggle" class="primary">Ambilight: ON</button>
+</div>
 
 <h2>Settings</h2>
 <div id="fw">reading the board…</div>
@@ -41,7 +45,7 @@
     <button id="rev">Flip direction</button>
     <button id="topleft">Start top-left</button>
     <button id="gap">Start at bottom gap</button>
-    <button id="mycut">My cut 97/53/96/53</button>
+    <button id="mycut">My cut 97/53/97/53</button>
     <button id="vivid">Vivid colours</button>
   </div>
   <div id="ringinfo" class="hint">—</div>
@@ -70,6 +74,13 @@ the board's compiled LED count is the hard upper limit.</p>
   var $ = function (id) { return document.getElementById(id); };
   var busy = false;
   var fw = { leds: 300, type: 'RGBW', source: 'cached' };
+  var outputOn = true;
+
+  function renderOutput() {
+    var b = $('outputToggle');
+    b.textContent = 'Ambilight: ' + (outputOn ? 'ON' : 'OFF') + ' — click to turn ' + (outputOn ? 'off' : 'on');
+    b.className = outputOn ? 'primary' : 'off';
+  }
 
   // Mirrors SPECS in index.js. The board's LED count replaces the fixed maximum at load time.
   var FIELDS = [
@@ -77,9 +88,9 @@ the board's compiled LED count is the hard upper limit.</p>
     { g:'geometry', k:'zoneCount',  t:'Zones around the ring',  min:1,    max:300, step:1,    hint:'one zone per LED by default' },
     { g:'geometry', k:'zoneTop',    t:'Top section LEDs',       min:0,    max:300, step:1,    hint:'0 = proportional; your cut: 97' },
     { g:'geometry', k:'zoneRight',  t:'Right section LEDs',     min:0,    max:300, step:1,    hint:'0 = proportional; your cut: 53' },
-    { g:'geometry', k:'zoneBottom', t:'Bottom section LEDs',    min:0,    max:300, step:1,    hint:'0 = proportional; your cut: 96 (48+48)' },
+    { g:'geometry', k:'zoneBottom', t:'Bottom section LEDs',    min:0,    max:300, step:1,    hint:'0 = proportional; your cut: 97' },
     { g:'geometry', k:'zoneLeft',   t:'Left section LEDs',      min:0,    max:300, step:1,    hint:'0 = proportional; your cut: 53' },
-    { g:'geometry', k:'mapOffset',  t:'Start offset (LED)',     min:0,    max:299, step:1,    hint:'where LED 0 sits on the wall' },
+    { g:'geometry', k:'mapOffset',  t:'Start offset (LED)',     min:0,    max:299, step:1,    hint:'where LED 0 sits (bottom-right start = 149)' },
     { g:'geometry', k:'mapReverse', t:'Reverse direction',      min:0,    max:1,   step:1,    hint:'0 = clockwise, 1 = anticlockwise' },
     { g:'geometry', k:'bandFrac',   t:'Edge band fraction',     min:0.01, max:0.5, step:0.01, hint:'height of each perimeter zone band' },
     { g:'geometry', k:'bars',       t:'Crop letterbox',         min:0,    max:1,   step:1,    hint:'detect black bars at top/bottom' },
@@ -91,18 +102,23 @@ the board's compiled LED count is the hard upper limit.</p>
     { g:'look', k:'black',      t:'Black level',             min:0,   max:200, step:1,    hint:'lifts every channel; lower = deeper colours' },
     { g:'look', k:'spatial',    t:'Neighbour blur',          min:0,   max:1,   step:0.05, hint:'blends adjacent zones; lower = tighter colours' },
     { g:'look', k:'peak',       t:'HDR peak (nits)',         min:100, max:4000,step:10,   hint:'assumed HDR highlight level; higher = less pastel' },
+    { g:'look', k:'hdr',        t:'HDR / PQ input',          min:0,   max:1,   step:1,    hint:'0 = SDR (this TV); 1 = real HDR sources only' },
+    { g:'look', k:'gamut',      t:'BT.2020 -> BT.709',       min:0,   max:1,   step:1,    hint:'use with hdr=1; leave 0 for SDR' },
     { g:'look', k:'targetFps',  t:'Target fps',              min:0,   max:120, step:1,    hint:'0 = uncapped; triples on a still image' },
     { g:'look', k:'staleMs',    t:'Fade after still (ms)',   min:0,   max:60000, step:500,  hint:'0 = never fade' },
     { g:'look', k:'staleLevel', t:'Fade to',                 min:0,   max:1,   step:0.05, hint:'brightness while the picture is frozen' },
     { g:'look', k:'punch',      t:'Scene-change punch',      min:0,   max:1,   step:0.05, hint:'brief boost on a cut' }
   ];
 
+  // The values this TV is calibrated with. Kept in sync with index.js DEFAULTS and with the
+  // working /opt/usr/share/ambilight/config.json. hdr/gamut=0 matter: the PQ/BT.2020 path shifts
+  // saturated SDR hues (orange -> yellow), so a fresh install must not start with them enabled.
   var DEFAULTS = {
-    ledCount:300, zoneCount:300, zoneTop:0, zoneRight:0, zoneBottom:0, zoneLeft:0,
-    mapOffset:0, mapReverse:0, bandFrac:0.08,
-    bars:1, barRows:0, barThresh:18, alpha:0.25, gamma:1.5, saturation:1,
-    targetFps:25, staleMs:6000, staleLevel:0.35, punch:0.15,
-    black:12, spatial:0.5, peak:203
+    ledCount:300, zoneCount:300, zoneTop:97, zoneRight:53, zoneBottom:97, zoneLeft:53,
+    mapOffset:149, mapReverse:1, bandFrac:0.08,
+    bars:1, barRows:0, barThresh:18, alpha:0.25, gamma:1.1, saturation:1.4,
+    targetFps:25, staleMs:6000, staleLevel:0.35, punch:0,
+    black:2, spatial:0.15, peak:400, hdr:0, gamut:0
   };
 
   function build() {
@@ -112,6 +128,10 @@ the board's compiled LED count is the hard upper limit.</p>
       lab.textContent = f.t;
       var inp = document.createElement('input');
       inp.type = 'number'; inp.id = 'f_' + f.k; inp.min = f.min; inp.max = f.max; inp.step = f.step;
+      // Seed with the calibrated defaults NOW. getConfig() below replaces them with the live values,
+      // but if that fetch fails the fields must not be blank and the preview must not fall back to
+      // mapOffset 0 (upper-left) - a blank panel looks like an unset config even when the TV is fine.
+      inp.value = DEFAULTS[f.k];
       lab.appendChild(inp); wrap.appendChild(lab);
       var hint = document.createElement('div'); hint.className = 'hint'; hint.textContent = f.hint;
       wrap.appendChild(hint);
@@ -140,7 +160,7 @@ the board's compiled LED count is the hard upper limit.</p>
 
   function setBusy(b) {
     busy = b;
-    ['start','stop','restart','save','saverestart','preset','resetgeo'].forEach(function (k) { $(k).disabled = b; });
+    ['start','stop','restart','outputToggle','save','saverestart','preset','resetgeo'].forEach(function (k) { $(k).disabled = b; });
   }
 
   function render(s) {
@@ -166,6 +186,10 @@ the board's compiled LED count is the hard upper limit.</p>
   function getConfig() {
     return fetch('config', { cache:'no-store' }).then(function (r) { return r.json(); }).then(function (d) {
       fw = d.firmware || fw;
+      if (d.config && d.config.outputEnabled !== undefined) {
+        outputOn = Number(d.config.outputEnabled) !== 0;
+        renderOutput();
+      }
       $('fw').textContent = 'Board: ' + fw.leds + ' LEDs, ' + fw.type + ' (' + fw.source + ')' +
         (fw.note ? ' — ' + fw.note : '');
       if (fw.source === 'firmware') {
@@ -211,6 +235,23 @@ the board's compiled LED count is the hard upper limit.</p>
   $('start').onclick = function () { go('start'); };
   $('stop').onclick = function () { go('stop'); };
   $('restart').onclick = function () { go('restart'); };
+  $('outputToggle').onclick = function () {
+    if (busy) return;
+    setBusy(true); msg('switching ambilight…');
+    var want = outputOn ? 0 : 1;
+    fetch('output', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ enabled: want })
+    }).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, body: d }; }); })
+      .then(function (d) {
+        if (!d.ok || !d.body.ok) { msg((d.body.errors || [d.body.error || 'switch failed']).join('\n'), true); return; }
+        outputOn = Number(d.body.enabled) !== 0;
+        renderOutput();
+        msg('Ambilight turned ' + (outputOn ? 'on' : 'off') + '.', false);
+      })
+      .catch(function (e) { msg('error: ' + e, true); })
+      .then(function () { setBusy(false); });
+  };
   $('save').onclick = function () { save(false); };
   $('saverestart').onclick = function () { save(true); };
   $('preset').onclick = function () { setValues(DEFAULTS); msg('preset loaded — press Save to apply.', false); };
@@ -364,12 +405,12 @@ the board's compiled LED count is the hard upper limit.</p>
     };
     $('topleft').onclick = function () { $('f_mapOffset').value = 0; ringDraw(); };
     $('mycut').onclick = function () {
-      // 299 physical LEDs: top 97, right 53, bottom 96 (48+48), left 53, with the cut at bottom
-      // centre. zoneCount stays 300; the spare slot lands at the cut.
+      // 300 physical LEDs, no gap: top 97, right 53, bottom 97, left 53. The strip starts at the
+      // bottom-right corner and runs counter-clockwise, so LED 0 is zone 149 (mapOffset + reverse).
       $('f_zoneTop').value = 97; $('f_zoneRight').value = 53;
-      $('f_zoneBottom').value = 96; $('f_zoneLeft').value = 53;
+      $('f_zoneBottom').value = 97; $('f_zoneLeft').value = 53;
       $('f_zoneCount').value = 300; $('f_ledCount').value = 300;
-      $('f_mapOffset').value = 0; $('f_mapReverse').value = 0;
+      $('f_mapOffset').value = 149; $('f_mapReverse').value = 1;
       ringDraw();
     };
     $('gap').onclick = function () {

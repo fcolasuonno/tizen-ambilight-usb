@@ -32,6 +32,7 @@ var CONFIG = '/opt/usr/share/ambilight/config.json';
 // the part that decides WHERE light goes; the rest decides HOW it looks. Everything else in config.json
 // (serialDevice, backend, ...) is preserved untouched on save.
 var SPECS = {
+    outputEnabled: ['int', 0, 1],
     ledCount:   ['int', 1, 2048],
     zoneCount:  ['int', 1, 2048],
     zoneTop:    ['int', 0, 2048],
@@ -50,20 +51,24 @@ var SPECS = {
     black:      ['num', 0, 200],
     spatial:    ['num', 0, 1],
     peak:       ['num', 100, 4000],
+    hdr:        ['int', 0, 1],
+    gamut:      ['int', 0, 1],
     targetFps:  ['int', 0, 120],
     staleMs:    ['num', 0, 60000],
     staleLevel: ['num', 0, 1],
     punch:      ['num', 0, 1]
 };
 
-// The "77 inch / 300 LED" preset. bandFrac and the bar settings are the upstream defaults; the rest
-// are the values this TV has been tuned with.
+// The "77 inch / 300 LED" preset: the values this TV is calibrated with. Kept in sync with the
+// ui.html DEFAULTS and with the working /opt/usr/share/ambilight/config.json. hdr/gamut=0 are
+// required for SDR content - the PQ/BT.2020 path shifts saturated hues (orange -> yellow).
 var DEFAULTS = {
-    ledCount: 300, zoneCount: 300, zoneTop: 0, zoneRight: 0, zoneBottom: 0, zoneLeft: 0,
-    mapOffset: 0, mapReverse: 0, bandFrac: 0.08,
-    bars: 1, barRows: 0, barThresh: 18, alpha: 0.25, gamma: 1.5, saturation: 1,
-    black: 12, spatial: 0.5, peak: 203,
-    targetFps: 25, staleMs: 6000, staleLevel: 0.35, punch: 0.15
+    outputEnabled: 1,
+    ledCount: 300, zoneCount: 300, zoneTop: 97, zoneRight: 53, zoneBottom: 97, zoneLeft: 53,
+    mapOffset: 149, mapReverse: 1, bandFrac: 0.08,
+    bars: 1, barRows: 0, barThresh: 18, alpha: 0.25, gamma: 1.1, saturation: 1.4,
+    black: 2, spatial: 0.15, peak: 400, hdr: 0, gamut: 0,
+    targetFps: 25, staleMs: 6000, staleLevel: 0.35, punch: 0
 };
 
 var START = [
@@ -354,6 +359,28 @@ module.exports = function (ctx) {
                             captureProblem: cache.captureProblem, lastAction: cache.lastAction,
                             lastError: cache.lastError, log: log });
                     });
+                });
+                return true;
+            }
+            if (sub === 'output' && req.method === 'POST') {
+                readBody(req, function (body, err) {
+                    if (err) { json(res, { ok: false, error: err.message }, 400); return; }
+                    var v = Number(body && body.enabled);
+                    if (v !== 0 && v !== 1) {
+                        json(res, { ok: false, errors: ['enabled must be 0 or 1'] }, 400);
+                        return;
+                    }
+                    // Live: the app polls /tmp/amb-control when no controlUrl is configured. The
+                    // SCORPIO blanks the strip ~400 ms after the last frame, so no restart is needed.
+                    var p = run(ctx, 'printf "enable=' + v + '\\n" > /tmp/amb-control', 5000);
+                    if (!p) { json(res, { ok: false, error: 'execute unavailable' }, 500); return; }
+                    p.then(function () {
+                        // Persist for the next service start as well (config is read only at startup).
+                        saveConfig({ outputEnabled: v }, function (saveErr) {
+                            if (saveErr) { json(res, { ok: false, error: saveErr }, 500); return; }
+                            json(res, { ok: true, enabled: v });
+                        });
+                    }, function (e) { json(res, { ok: false, error: String(e && e.message || e) }, 500); });
                 });
                 return true;
             }
