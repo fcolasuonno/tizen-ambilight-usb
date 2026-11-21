@@ -63,7 +63,9 @@ namespace TizenAmbilight
                     case "alpha": if (dv >= 0.02 && dv <= 1.0) cfg.Alpha = dv; break;
                     case "gain":  if (dv >= 0.1 && dv <= 8.0) cfg.Gain = dv; break;
                     case "gamma": if (dv >= 1.0 && dv <= 4.0) cfg.Gamma = dv; break;
-                    case "sat":   if (dv >= 0.0 && dv <= 4.0) cfg.Saturation = dv; break;
+                    // Capped at 1: >1 expands chroma before the BT.601 matrix and clips low channels
+                    // to zero (greens lose all red). Verified on the captured plane, not theoretical.
+                    case "sat":   if (dv >= 0.0 && dv <= 1.0) cfg.Saturation = dv; break;
                     case "hdr":  if (dv == 0 || dv == 1) cfg.Hdr = dv != 0; break;
                     // Capture request size, live. The hardware scaler downsamples to whatever we ask
                     // for, and we only consume 73 zone averages, so a smaller request can cut the

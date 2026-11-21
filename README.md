@@ -68,7 +68,7 @@ Write `/opt/usr/share/ambilight/config.json`:
   "ppiZones": 24,
   "captureBackend": "plane",
   "gamma": 1.1,
-  "saturation": 1.4,
+  "saturation": 1,
   "black": 2,
   "spatial": 0.15,
   "peak": 400

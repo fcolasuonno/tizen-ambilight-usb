@@ -270,14 +270,13 @@ namespace TizenAmbilight
             c.StaleLevel = PrefDouble("staleLevel", 0.35);
             if (c.StaleLevel < 0) c.StaleLevel = 0;
             if (c.StaleLevel > 1.0) c.StaleLevel = 1.0;
-            // 1.0 = no chroma exaggeration. Scaling chroma preserves hue and cannot create colour in
-            // a grey zone; it compensates for per-zone U/V averaging, which is a vector mean and pulls
-            // mixed-hue content toward neutral (measured mean output saturation 0.17 at 1.0 vs 0.31 at
-            // 1.8). Raise toward ~1.4 for a deliberately more vivid look; above ~1.5 the soft gamut
-            // map starts pulling chroma back.
+            // 1.0 = no chroma exaggeration. Values above 1 expand U/V BEFORE the BT.601 matrix, which
+            // drives low channels negative and clips them to zero: a green lost all its red (30a606
+            // became 00ac01 in a camera frame). Capped at 1 so a hand-edited config cannot reintroduce
+            // the hue shift. Reducing below 1 is still allowed to tone chroma down.
             c.Saturation = PrefDouble("saturation", 1.0);
             if (c.Saturation < 0.0) c.Saturation = 0.0;
-            if (c.Saturation > 4.0) c.Saturation = 4.0;
+            if (c.Saturation > 1.0) c.Saturation = 1.0;
             // The plane carries PQ-encoded HDR on the reference TV (luma ceiling 148 on two unrelated
             // contents = the PQ code for 203 nits). Set 0 only if your device delivers SDR.
             c.Hdr = PrefInt("hdr", 1) != 0;
