@@ -61,9 +61,9 @@ then copy the values into `config.json`.
 | `hdr` | `1` | decode the plane as PQ (HDR). Set `0` only if your TV delivers SDR. |
 | `gamut` | `1` | convert BT.2020 to BT.709 for the LEDs |
 | `peak` | `203` | nits that map to full scale (100–4000) |
-| `adaptiveGamma` | `1` | scene-adaptive tone curve |
-| `gammaMin` / `gammaMax` / `adaptTau` | `1.15` / `1.6` / `2.0` | its range and time constant (s) |
-| `gamma` | `1.5` | manual curve, used when `adaptiveGamma` is `0`. This is the brightness dial. |
+| `adaptiveGamma` | `0` | scene-adaptive tone curve; off by default so `gamma` is the effective value |
+| `gammaMin` / `gammaMax` / `adaptTau` | `1.15` / `1.6` / `2.0` | its range and time constant (s), only used when enabled |
+| `gamma` | `1` | manual curve, used when `adaptiveGamma` is `0`. 1 = no lift, matches the captured frame. |
 | `gain` | `1.0` | straight multiplier. Above 1 it clips; prefer `gamma`. |
 | `black` | `12` | black crush: zone levels at or below this go to 0 |
 | `saturation` | `1.0` | chroma scale; preserves hue |

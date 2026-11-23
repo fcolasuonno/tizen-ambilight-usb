@@ -97,7 +97,8 @@ the board's compiled LED count is the hard upper limit.</p>
     { g:'geometry', k:'barRows',    t:'Row-based bar detection',min:0,    max:1,   step:1,    hint:'off by default: false positives' },
     { g:'geometry', k:'barThresh',  t:'Bar threshold',          min:0,    max:255, step:1,    hint:'luma below this counts as a bar' },
     { g:'look', k:'alpha',      t:'Smoothing (alpha)',      min:0,   max:1,   step:0.01, hint:'lower = smoother, slower' },
-    { g:'look', k:'gamma',      t:'Gamma',                  min:0.5, max:4,   step:0.05, hint:'raise for brighter midtones' },
+    { g:'look', k:'gamma',      t:'Gamma',                  min:0.5, max:4,   step:0.05, hint:'1 = no lift, matches the captured frame' },
+    { g:'look', k:'adaptiveGamma', t:'Adaptive gamma',      min:0,   max:1,   step:1,    hint:'off: gamma stays at the value above' },
     { g:'look', k:'saturation', t:'Saturation',              min:0.5, max:1,   step:0.05, hint:'keep at 1; above 1 clips low channels and shifts hue' },
     { g:'look', k:'black',      t:'Black level',             min:0,   max:200, step:1,    hint:'lifts every channel; lower = deeper colours' },
     { g:'look', k:'spatial',    t:'Neighbour blur',          min:0,   max:1,   step:0.05, hint:'blends adjacent zones; lower = tighter colours' },
@@ -116,7 +117,7 @@ the board's compiled LED count is the hard upper limit.</p>
   var DEFAULTS = {
     ledCount:300, zoneCount:300, zoneTop:97, zoneRight:53, zoneBottom:97, zoneLeft:53,
     mapOffset:149, mapReverse:1, bandFrac:0.08,
-    bars:1, barRows:0, barThresh:18, alpha:0.25, gamma:1.1, saturation:1,
+    bars:1, barRows:0, barThresh:18, alpha:0.25, gamma:1, saturation:1, adaptiveGamma:0,
     targetFps:25, staleMs:6000, staleLevel:0.35, punch:0,
     black:2, spatial:0.15, peak:400, hdr:0, gamut:0
   };
@@ -263,9 +264,9 @@ the board's compiled LED count is the hard upper limit.</p>
     msg('geometry reset — press Save to apply.', false);
   };
   $('vivid').onclick = function () {
-    // Counter the per-channel gamma lift, the black-level lift and the neighbour blur. Saturation
-    // stays at 1: >1 clips low channels in YuvToRgb (greens lost all their red on this TV).
-    $('f_gamma').value = 1.1; $('f_saturation').value = 1;
+    // Counter the per-channel gamma lift, the black-level lift and the neighbour blur. Gamma and
+    // saturation stay at 1: >1 on either lifts/clips the captured plane (greens lost all their red).
+    $('f_gamma').value = 1; $('f_saturation').value = 1; $('f_adaptiveGamma').value = 0;
     $('f_black').value = 2; $('f_spatial').value = 0.15;
     $('f_punch').value = 0; $('f_peak').value = 400;
     msg('vivid preset loaded — press Save & restart to apply.', false);

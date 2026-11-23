@@ -80,7 +80,7 @@ namespace TizenAmbilight
         public const string AppId = "dev.ritwickverma.TizenAmbilight";
         // Bump this whenever behaviour changes. It sat at "v3" through the HDR decode, the BT.2020->709
         // gamut map and the adaptive tone curve, which made build identification useless in telemetry.
-        public const string Version = "v11-usb";  // v11-usb: clamp saturation <=1 (above 1 clips low channels and shifts hue)
+        public const string Version = "v12-usb";  // v12-usb: gamma 1 + adaptive off by default; saturation clamped <=1
 
         // ---- failure handling ----
         const int FailSleepMs = 200;                     // pause after a frame-less iteration

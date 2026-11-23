@@ -60,7 +60,7 @@ installed as a systemd unit.
 | `ledCount` / `zoneCount` | the whole ring. `zoneCount` = `ledCount` means one zone per LED |
 | `zoneTop` / `zoneRight` / `zoneBottom` / `zoneLeft` | optional exact cut list. All four zero = the original proportional split from 960×540. On this TV: **97 / 53 / 96 / 53** (299 physical LEDs, gap at bottom centre). The leftover slot to reach `zoneCount` (300) is placed at the cut, after the left edge, so every real LED keeps its exact position. The bottom sampling also skips that one LED pitch so the unlit space is not sampled into a zone |
 | `targetFps` | capture-rate cap (`0` = uncapped). The cap triples itself on a frozen picture |
-| `gamma`, `saturation`, `black`, `spatial`, `peak` | colour shaping. The **Vivid colours** preset sets 1.1 / 1 / 2 / 0.15 / 400. Keep `saturation` at 1: above 1 it expands chroma before the BT.601 matrix, clipping low channels to zero (greens lose all red) |
+| `gamma`, `saturation`, `black`, `spatial`, `peak` | colour shaping. The **Vivid colours** preset sets 1 / 1 / 2 / 0.15 / 400. Keep `gamma` and `saturation` at 1: gamma>1 lifts the captured plane, saturation>1 expands chroma before the BT.601 matrix and clips low channels (greens lose all red). `adaptiveGamma` is off by default; turning it on overrides the configured gamma |
 | `wledIp` | leave empty; if set, the upstream UDP output is used instead of serial |
 
 ## Build

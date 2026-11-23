@@ -47,6 +47,7 @@ var SPECS = {
     barThresh:  ['int', 0, 255],
     alpha:      ['num', 0, 1],
     gamma:      ['num', 0.5, 4],
+    adaptiveGamma: ['num', 0, 1],
     saturation: ['num', 0.5, 1],
     black:      ['num', 0, 200],
     spatial:    ['num', 0, 1],
@@ -68,7 +69,7 @@ var DEFAULTS = {
     mapOffset: 149, mapReverse: 1, bandFrac: 0.08,
     // saturation stays 1: >1 expands chroma BEFORE the BT.601 matrix, which drives low channels
     // negative and clips them to zero (a warm green lost all its red - measured on the TV).
-    bars: 1, barRows: 0, barThresh: 18, alpha: 0.25, gamma: 1.1, saturation: 1,
+    bars: 1, barRows: 0, barThresh: 18, alpha: 0.25, gamma: 1, saturation: 1, adaptiveGamma: 0,
     black: 2, spatial: 0.15, peak: 400, hdr: 0, gamut: 0,
     targetFps: 25, staleMs: 6000, staleLevel: 0.35, punch: 0
 };

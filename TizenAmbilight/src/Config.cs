@@ -197,19 +197,18 @@ namespace TizenAmbilight
             // Brightness belongs in GAMMA, not gain: gain multiplies the top of the range and clips it
             // (gain 1.25 flattened everything above a zone average of ~200 to 255), whereas gamma lifts
             // the mid-tones and cannot clip.
-            // 1.5 because the plane is PRE-TONE-MAP and the TV brightens it substantially for display,
-            // so a faithful mapping reads darker than the screen. Measured on a real film: 96% of its
-            // pixels sat at PQ codes 16-31 (0.09-0.28 nits), where gamma 1.2 left the LEDs at 0.2%.
-            // This is the manual curve; with adaptiveGamma on it is only the fallback.
-            c.Gamma = PrefDouble("gamma", 1.5);
+            // gamma 1 = no midtone lift: the strip reproduces the captured plane as-is. The old 1.5
+            // default (plus adaptive gamma) was tuned against the panel's own processing and lifted
+            // colours away from the source; measured effGamma 1.22 even with gamma=1 configured.
+            c.Gamma = PrefDouble("gamma", 1);
             if (c.Gamma < 1.0) c.Gamma = 1.0;
             if (c.Gamma > 4.0) c.Gamma = 4.0;
-            // ADAPTIVE TONE CURVE. One static gamma cannot suit both a film sitting at 0.09-0.28 nits
-            // and a bright game. The surround-gamma rule says a darker viewing condition wants a
-            // HIGHER gamma; taking the scene itself as the "surround" gives a content-adaptive curve,
-            // the same idea as HDR10+ / SMPTE ST 2094 dynamic metadata and madVR's dynamic target nits.
+            // ADAPTIVE TONE CURVE. Off by default so the configured gamma IS the effective gamma.
+            // When enabled it glides between gammaMin/gammaMax with the scene's median luma (the
+            // surround-gamma rule), which overrides the configured value - that is why gamma=1 used
+            // to report effGamma 1.15..1.6. Opt in explicitly if you want scene-dependent lift.
             c.ZoneHexAll = PrefInt("zoneHexAll", 0) != 0;
-            c.AdaptiveGamma = PrefInt("adaptiveGamma", 1) != 0;
+            c.AdaptiveGamma = PrefInt("adaptiveGamma", 0) != 0;
             c.GammaMin = Math.Max(0.5, Math.Min(3.0, PrefDouble("gammaMin", 1.15)));
             c.GammaMax = Math.Max(c.GammaMin, Math.Min(4.0, PrefDouble("gammaMax", 1.6)));
             // ~2 s: slow enough that the strip never visibly pumps between scenes, which is the failure
